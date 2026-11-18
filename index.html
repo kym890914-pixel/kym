@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>설문 집계기</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --text: #1d1d1f;
+    --muted: #5f6368;
+    --line: #d9d9d6;
+    --accent: #1f5fbf;
+    --accent-text: #ffffff;
+    --warn-bg: #fff6dc;
+    --warn-text: #6b4a00;
+    --err-bg: #fde8e8;
+    --err-text: #8a1c1c;
+    --head: #f0f0ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --panel: #202124;
+      --text: #e8eaed;
+      --muted: #a0a4a8;
+      --line: #3c4043;
+      --accent: #8ab4f8;
+      --accent-text: #10213d;
+      --warn-bg: #3a3014;
+      --warn-text: #f2d48a;
+      --err-bg: #3d1d1d;
+      --err-text: #f4b4b4;
+      --head: #2a2b2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin-bottom: 8px; }
+  textarea {
+    width: 100%;
+    min-height: 200px;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    tab-size: 8;
+  }
+  textarea:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  button {
+    font: inherit;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .note { font-size: 0.9rem; color: var(--muted); margin: 12px 0 0; }
+  .note ul { margin: 4px 0 0; padding-left: 20px; }
+  .msg { border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; }
+  .msg.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .msg.error { background: var(--err-bg); color: var(--err-text); }
+  .summary { margin: 0 0 12px; color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; white-space: pre-line; min-width: 8em; }
+  thead th { background: var(--head); font-weight: 600; white-space: normal; word-break: keep-all; }
+  @media (max-width: 480px) {
+    th, td { padding: 8px 6px; }
+    th:first-child, td:first-child { min-width: 6em; }
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>설문 집계기</h1>
+  <p class="lead">엑셀에서 머리글 줄까지 복사해 아래에 붙여넣으면 문항별 결과 표가 나옵니다. 붙여넣은 데이터는 이 브라우저 안에서만 계산하며, 어디로 보내거나 저장하지 않습니다.</p>
+
+  <section>
+    <label for="input">응답 데이터 붙여넣기</label>
+    <textarea id="input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+      placeholder="응답번호&#9;문항1&#9;문항2&#10;1&#9;5&#9;4&#10;2&#9;3&#9;"></textarea>
+    <div class="actions">
+      <button type="button" id="run" class="primary">집계</button>
+      <button type="button" id="clear">지우기</button>
+      <button type="button" id="sample">예시 넣기</button>
+    </div>
+    <div class="note">
+      집계 기준
+      <ul>
+        <li>첫 열(응답번호)은 집계하지 않습니다.</li>
+        <li>앞뒤 공백을 지운 값이 1·2·3·4·5 중 하나면 <b>유효</b>, 비었거나 공백만 있으면 <b>빈 응답</b>, 그 밖의 값은 <b>제외</b>입니다.</li>
+        <li>칸 수가 머리글보다 모자란 줄은 모자란 칸을 빈 응답으로 셉니다.</li>
+        <li>평균은 유효 응답의 합 ÷ 유효 응답 수를 소수 셋째 자리에서 반올림해 둘째 자리까지 보여 줍니다. 유효 응답이 없으면 "-"입니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="result" aria-live="polite" hidden>
+    <p id="error" class="msg error" hidden></p>
+    <div id="warnings"></div>
+    <p id="summary" class="summary"></p>
+    <div class="table-wrap">
+      <table id="table" hidden>
+        <thead>
+          <tr><th scope="col">문항</th><th scope="col">유효 응답</th><th scope="col">평균</th><th scope="col">빈 응답</th><th scope="col">제외</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script id="survey-core">
+// 계산 로직: DOM을 건드리지 않는 순수 함수만 둔다. tests/core.test.mjs가 이 블록만 꺼내 시험한다.
+var SurveyCore = (function () {
+  'use strict';
+
+  var VALID = { '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+
+  // 엑셀에서 복사한 탭 구분 글을 줄·칸 배열로 나눈다.
+  // 큰따옴표로 시작하는 칸은 엑셀식 인용 칸으로 읽는다("" 는 따옴표 하나).
+  // 완전히 빈 줄(길이 0)은 버린다.
+  function parseTSV(text) {
+    text = String(text);
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    var rows = [];
+    var row = [];
+    var field = '';
+    var quoted = false;     // 지금 칸이 인용 칸이었는지
+    var inQuotes = false;   // 인용 안을 읽는 중인지
+    var fieldStart = true;
+    var n = text.length;
+
+    function endField() {
+      row.push(field);
+      field = '';
+      quoted = false;
+      fieldStart = true;
+    }
+    function endRow() {
+      var wasQuoted = quoted;
+      endField();
+      if (!(row.length === 1 && row[0] === '' && !wasQuoted)) rows.push(row);
+      row = [];
+    }
+
+    for (var i = 0; i < n; i++) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else {
+          field += c;
+        }
+        continue;
+      }
+      if (fieldStart && c === '"') {
+        inQuotes = true;
+        quoted = true;
+        fieldStart = false;
+        continue;
+      }
+      if (c === '\t') { endField(); continue; }
+      if (c === '\r' || c === '\n') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        endRow();
+        continue;
+      }
+      field += c;
+      fieldStart = false;
+    }
+    if (field !== '' || quoted || row.length > 0) endRow();
+    return rows;
+  }
+
+  // 칸 판정: 'valid' | 'blank' | 'excluded'
+  function classifyCell(value) {
+    var v = value == null ? '' : String(value).trim();
+    if (v === '') return 'blank';
+    if (Object.prototype.hasOwnProperty.call(VALID, v)) return 'valid';
+    return 'excluded';
+  }
+
+  // 평균 = sum ÷ count 를 소수 셋째 자리에서 반올림(0.5 올림)해 둘째 자리까지.
+  // 정수 연산으로 반올림해 부동소수 오차(예: 2.675)를 피한다. count가 0이면 "-".
+  function formatMean(sum, count) {
+    if (!count) return '-';
+    var hundredths = Math.floor((sum * 200 + count) / (count * 2));
+    var whole = Math.floor(hundredths / 100);
+    var frac = hundredths % 100;
+    return whole + '.' + (frac < 10 ? '0' : '') + frac;
+  }
+
+  // 붙여넣은 글 전체를 집계한다.
+  function tally(text) {
+    var rows = parseTSV(text);
+    if (rows.length === 0) {
+      return { ok: false, error: '붙여넣은 데이터가 없습니다.' };
+    }
+    var header = rows[0];
+    if (header.length < 2) {
+      return { ok: false, error: '머리글에 문항 열이 없습니다. 첫 열(응답번호) 뒤에 문항 열이 있어야 합니다.' };
+    }
+    var qCount = header.length - 1;
+    var stats = [];
+    for (var q = 0; q < qCount; q++) {
+      var name = header[q + 1].trim();
+      stats.push({ name: name || '(' + (q + 2) + '번째 열)', valid: 0, sum: 0, blank: 0, excluded: 0 });
+    }
+    var shortRows = 0;
+    var longRows = 0;
+    for (var r = 1; r < rows.length; r++) {
+      var cells = rows[r];
+      if (cells.length < header.length) shortRows++;
+      else if (cells.length > header.length) longRows++;
+      for (var k = 0; k < qCount; k++) {
+        var cell = k + 1 < cells.length ? cells[k + 1] : '';
+        var kind = classifyCell(cell);
+        var s = stats[k];
+        if (kind === 'valid') { s.valid++; s.sum += VALID[cell.trim()]; }
+        else if (kind === 'blank') s.blank++;
+        else s.excluded++;
+      }
+    }
+    return {
+      ok: true,
+      responses: rows.length - 1,
+      shortRows: shortRows,
+      longRows: longRows,
+      questions: stats.map(function (s) {
+        return { name: s.name, valid: s.valid, mean: formatMean(s.sum, s.valid), blank: s.blank, excluded: s.excluded };
+      })
+    };
+  }
+
+  return { parseTSV: parseTSV, classifyCell: classifyCell, formatMean: formatMean, tally: tally };
+})();
+</script>
+<script id="survey-ui">
+// 화면 코드: 입력을 읽어 SurveyCore.tally에 넘기고 결과를 그린다.
+// 사용자 데이터는 textContent로만 넣는다(HTML로 해석하지 않음).
+(function () {
+  'use strict';
+  var input = document.getElementById('input');
+  var result = document.getElementById('result');
+  var errorBox = document.getElementById('error');
+  var warnings = document.getElementById('warnings');
+  var summary = document.getElementById('summary');
+  var table = document.getElementById('table');
+  var tbody = document.getElementById('tbody');
+
+  var SAMPLE = [
+    '응답번호\t서비스 만족도\t직원 친절도\t재이용 의향',
+    '1\t5\t4\t5',
+    '2\t4\t\t4',
+    '3\t 3 \t5\t모름',
+    '4\t2\t4',
+    '5\t5\t6\t3'
+  ].join('\n');
+
+  function cell(tag, text) {
+    var el = document.createElement(tag);
+    el.textContent = text;
+    return el;
+  }
+
+  function warn(text) {
+    var p = cell('p', text);
+    p.className = 'msg warn';
+    warnings.appendChild(p);
+  }
+
+  function render() {
+    var text = input.value;
+    tbody.textContent = '';
+    warnings.textContent = '';
+    summary.textContent = '';
+    errorBox.hidden = true;
+    table.hidden = true;
+
+    if (text.trim() === '') { result.hidden = true; return; }
+    result.hidden = false;
+
+    var r = SurveyCore.tally(text);
+    if (!r.ok) {
+      errorBox.textContent = r.error;
+      errorBox.hidden = false;
+      return;
+    }
+
+    summary.textContent = '응답 ' + r.responses + '줄 · 문항 ' + r.questions.length + '개';
+    if (r.responses === 0) warn('머리글 아래에 응답 줄이 없습니다.');
+    if (r.shortRows > 0) warn('칸 수가 머리글보다 모자란 줄이 ' + r.shortRows + '줄 있어, 모자란 칸을 빈 응답으로 셌습니다.');
+    if (r.longRows > 0) warn('칸 수가 머리글보다 많은 줄이 ' + r.longRows + '줄 있어, 남는 칸은 집계하지 않았습니다.');
+
+    r.questions.forEach(function (q) {
+      var tr = document.createElement('tr');
+      var th = cell('th', q.name);
+      th.scope = 'row';
+      tr.appendChild(th);
+      tr.appendChild(cell('td', String(q.valid)));
+      tr.appendChild(cell('td', q.mean));
+      tr.appendChild(cell('td', String(q.blank)));
+      tr.appendChild(cell('td', String(q.excluded)));
+      tbody.appendChild(tr);
+    });
+    table.hidden = false;
+  }
+
+  input.addEventListener('input', render);
+  document.getElementById('run').addEventListener('click', render);
+  document.getElementById('clear').addEventListener('click', function () {
+    input.value = '';
+    render();
+    input.focus();
+  });
+  document.getElementById('sample').addEventListener('click', function () {
+    input.value = SAMPLE;
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
